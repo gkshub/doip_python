@@ -1,0 +1,64 @@
+{
+    "doip_client": {
+        "protocol_version": 2,
+        "network": {
+            "interface": "eth0",
+            "ip_address": "192.168.0.100",
+            "subnet_mask": "255.255.255.0",
+            "gateway": "192.168.0.1",
+            "tcp_port": 13400,
+            "udp_port": 13400,
+            "ipv6": {
+                "enabled": false,
+                "address": null
+            }
+        },
+        "vehicles": [
+            {
+                "vehicle_id": "vehicle_1",
+                "vin": "WVWZZZ1JZXW000001",
+                "ip_address": "192.168.0.10",
+                "logical_address": "0x0E00",
+                "eid": "00:11:22:33:44:55",
+                "gid": "10:10:10:10:10:10",
+                "max_tcp_connections": 2,
+                "uds_profile": "default_profile"
+            },
+            {
+                "vehicle_id": "vehicle_2",
+                "vin": "WVWZZZ1JZXW000002",
+                "ip_address": "192.168.0.11",
+                "logical_address": "0x0E01",
+                "eid": "00:11:22:33:44:66",
+                "gid": "20:20:20:20:20:20",
+                "max_tcp_connections": 2,
+                "uds_profile": "programming_profile"
+            },
+            {
+                "vehicle_id": "vehicle_3",
+                "vin": "WVWZZZ1JZXW000003",
+                "ip_address": "192.168.0.12",
+                "logical_address": "0x0E02",
+                "eid": "00:11:22:33:44:77",
+                "gid": "30:30:30:30:30:30",
+                "max_tcp_connections": 1,
+                "uds_profile": "limited_profile"
+            }
+        ],
+        "target": {
+            "target_ip": "192.168.0.10",
+            "target_logical_address": "0x0E00",
+            "source_logical_address": "0x0E80",
+            "routing_activation_type": 0
+        },
+        "timeouts": {
+            "tcp_connect_timeout_ms": 3000,
+            "routing_activation_timeout_ms": 2000,
+            "uds_response_timeout_ms": 5000
+        },
+        "retry": {
+            "max_retries": 3,
+            "retry_interval_ms": 1000
+        }
+    }
+}

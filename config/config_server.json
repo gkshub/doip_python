@@ -1,0 +1,55 @@
+{
+    "doip": {
+        "protocol_version": 2,
+        "inverse_protocol_version": 253,
+        "network": {
+            "interface": "eth0",
+            "ip_address": "192.168.0.10",
+            "subnet_mask": "255.255.255.0",
+            "gateway": "192.168.0.1",
+            "tcp_port": 13400,
+            "udp_port": 13400,
+            "dhcp_enabled": false,
+            "vlan_id": null,
+            "ipv6": {
+                "enabled": false,
+                "address": null
+            }
+        },
+        "vehicle": {
+            "vehicle_id": "vehicle_1",
+            "vin": "WVWZZZ1JZXW000001",
+            "ip_address": "192.168.0.10",
+            "logical_address": "0x0E00",
+            "eid": "00:11:22:33:44:55",
+            "gid": "10:10:10:10:10:10",
+            "max_tcp_connections": 2,
+            "uds_profile": "default_profile"
+        },
+        "routing_activation": {
+            "activation_type": 0,
+            "require_authentication": false,
+            "max_concurrent_tcp_connections": 2,
+            "response_timeout_ms": 2000
+        },
+        "timing": {
+            "alive_check_interval_ms": 2000,
+            "initial_inactivity_timeout_ms": 5000,
+            "general_inactivity_timeout_ms": 10000
+        },
+        "diagnostics": {
+            "uds_enabled": true,
+            "security_access_required": true,
+            "supported_sessions": [
+                "default",
+                "programming",
+                "extended"
+            ]
+        },
+        "security": {
+            "tls_enabled": false,
+            "certificate_path": null,
+            "private_key_path": null
+        }
+    }
+}
