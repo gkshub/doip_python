@@ -1,6 +1,19 @@
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 import streamlit as st
 
-CONFIG_PATH = "../config/config_client.json"
+# Project Related Imports
+import json_config
+
+CONFIG_PATH = json_config.get_config_path()
+logger.info(f" DoIP Client Configuration Path: {CONFIG_PATH}")
 
 st.title("DoIP Configuration Tool 🚗")
 
@@ -29,7 +42,7 @@ if st.button("Save Configuration"):
 st.header("2. Trigger DoIP Client Connection")
 st.info("Ensure that the DoIP server is running and the configuration is correct before attempting to connect.")
 if st.button("Connect to DoIP Server"):
-    from src.doip_client.doip_engine import DoIPEngine
+    from doip_client.doip_engine import DoIPEngine
     with st.spinner("Connecting to DoIP server..."):
         try:
             engine = DoIPEngine(CONFIG_PATH)
