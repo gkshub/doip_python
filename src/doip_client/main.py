@@ -1,4 +1,6 @@
+import asyncio
 import logging
+import threading
 
 # Configure logging
 logging.basicConfig(
@@ -11,6 +13,7 @@ import streamlit as st
 
 # Project Related Imports
 import json_config
+from doip_engine import DoIPEngine
 
 CONFIG_PATH = json_config.get_config_path()
 logger.info(f" DoIP Client Configuration Path: {CONFIG_PATH}")
@@ -41,18 +44,28 @@ if st.button("Save Configuration"):
 # SECTION 2: Trigger DoIP Client Connection
 st.header("2. Trigger DoIP Client Connection")
 st.info("Ensure that the DoIP server is running and the configuration is correct before attempting to connect.")
-if st.button("Connect to DoIP Server"):
-    from doip_client.doip_engine import DoIPEngine
-    with st.spinner("Connecting to DoIP server..."):
-        try:
+
+def is_connected():
+    return hasattr(st.session_state, "doip_thread") and st.session_state.doip_thread.is_alive()
+
+if st.button("Connect to DoIP Server", disabled=is_connected()):
+    if is_connected():
+        st.warning("Already connected to DoIP server. Please disconnect first.")
+    else:
+        with st.spinner("Connecting to DoIP server..."):
             engine = DoIPEngine(CONFIG_PATH)
-            result = engine.connect()
-            if result:
-                st.success(f"Connected to DoIP server successfully!")
-            else:
-                st.error(f"Failed to connect to DoIP server. {result}")
-        except Exception as e:
-            st.error(f"Failed to connect to DoIP server: {e}")
+
+            st.session_state.doip_thread = threading.Thread(target=asyncio.run, 
+                                                            args=(engine.start_connection(),), 
+                                                            daemon=True)
+            st.session_state.doip_thread.start()
+
+if is_connected():
+    st.status("DoIP Client is connected and running.", state="running")
+    if st.button("Disconnect from DoIP Server"):
+        st.session_state.doip_thread.is_running = False
+
+            
 
 
 

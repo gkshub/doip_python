@@ -1,4 +1,5 @@
 import logging
+import socket   
 
 # Configure logging
 logging.basicConfig(
@@ -7,74 +8,253 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-import socket
-
-class DoIPConnection:
-    """Class to manage DoIP connection and communication."""
-    def __init__(self, target_ip, target_port=13400):
-        self.target_ip = target_ip
-        self.target_port = target_port
+class BaseConnection:
+    def __init__(self, timeout=5.0):
         self.sock = None
+        self.timeout = timeout
+
+    def is_active(self):
+        return self.sock is not None
+    
+    def close(self):
+        if self.sock:
+            try:
+                self.sock.shutdown(socket.SHUT_RDWR)
+            except Exception as e:
+                logger.warning(f"Error shutting down socket: {e}")
+            self.sock.close()
+            self.sock = None
+            logger.info("Connection closed successfully.")
+        else:
+            logger.error("No active connection to close.")
+
+class UDPConnection(BaseConnection):
+    def __init__(self, timeout=5.0):
+        super().__init__(timeout)
+        self.broadcast_enabled = False
+
+    def init_broadcast(self) -> bool:
+        """
+        Initialize UDP socket with broadcast capability for sending.
+
+        Returns:
+            True if initialization successful, False otherwise
+        """
+        try:
+            if not self.sock:
+                self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            self.sock.settimeout(self.timeout)
+            self.broadcast_enabled = True
+            logger.info("UDP socket initialized with broadcast capability")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to initialize broadcast socket - {e}")
+            return False
+
+    def init_for_receiving(self) -> bool:
+        """
+        Initialize UDP socket for receiving broadcast messages.
+
+        Returns:
+            True if initialization successful, False otherwise
+        """
+        try:
+            if not self.sock:
+                self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            self.sock.settimeout(self.timeout)
+            logger.info("UDP socket initialized for receiving")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to initialize receiving socket - {e}")
+            return False
+
+    def send(self, data: bytes, address: tuple) -> bool:
+        """
+        Send raw bytes to a specific address.
+
+        Args:
+            data: Raw bytes to send
+            address: Tuple of (ip, port)
+
+        Returns:
+            True if send successful, False otherwise
+        """
+        if not self.sock:
+            logger.error("Cannot send: No active UDP socket.")
+            return False
+
+        try:
+            self.sock.sendto(data, address)
+            logger.info(f"Sent {len(data)} bytes to {address[0]}:{address[1]}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send UDP data to {address} - {e}")
+            self.close()
+            return False
+
+    def receive(self, timeout: float = None) -> tuple:
+        """
+        Receive raw bytes from socket.
+
+        Args:
+            timeout: Optional timeout in seconds. Uses self.timeout if not specified.
+
+        Returns:
+            Tuple of (data, address) or (None, None) on timeout/error
+        """
+        if not self.sock:
+            logger.error("Cannot receive: No active UDP socket.")
+            return None, None
+
+        try:
+            if timeout:
+                self.sock.settimeout(timeout)
+            data, addr = self.sock.recvfrom(1024)
+            logger.info(f"Received {len(data)} bytes from {addr[0]}:{addr[1]}")
+            return data, addr
+        except socket.timeout:
+            logger.warning("No data received within the timeout period.")
+            return None, None
+        except Exception as e:
+            logger.error(f"Failed to receive UDP data - {e}")
+            self.close()
+            return None, None
+
+    def bind(self, port: int) -> bool:
+        """
+        Bind UDP socket to a port for listening.
+
+        Args:
+            port: Port number to bind to
+
+        Returns:
+            True if bind successful, False otherwise
+        """
+        if not self.sock:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            self.sock.settimeout(self.timeout)
+
+        try:
+            self.sock.bind(('', port))
+            logger.info(f"Bound UDP socket to port {port}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to bind to port {port} - {e}")
+            self.close()
+            return False
+
+    def discover_vehicle(self,
+                         request_data: bytes,
+                         broadcast_address='255.255.255.255',
+                         port=13400):
+        """
+        Legacy method for vehicle discovery. Use send/receive methods instead.
+        Kept for backward compatibility.
+        """
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        self.sock.settimeout(self.timeout)
+
+        try:
+            self.sock.sendto(request_data, (broadcast_address, port))
+            logger.info(f"Sent discovery request to {broadcast_address}:{port}")
+            data, addr = self.sock.recvfrom(1024)
+            logger.info(f"Received response from {addr[0]}:{addr[1]}")
+            return addr[0]  # Return the IP address of the responding vehicle
+        except socket.timeout:
+            logger.warning("No response received within the timeout period.")
+            return None
+        finally:
+            # Ensure the socket is closed after discovery attempt
+            self.close()
+
+class TCPConnection(BaseConnection):
+    def __init__(self, ip: str, port: int, timeout=5.0):
+        super().__init__(timeout)
+        self.ip = ip
+        self.port = port
 
     def connect(self):
-        """Establish a TCP connection to the DoIP server."""
+        # Create a TCP socket and attempt to connect to the specified IP and port
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.settimeout(self.timeout)
         try:
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.sock.settimeout(5)  # Set a timeout for connection attempts
-            self.sock.connect((self.target_ip, self.target_port))
-            logger.info(f"Connected to DoIP server at {self.target_ip}:{self.target_port}")
+            self.sock.connect((self.ip, self.port))
+            logger.info(f"Successfully connected to {self.ip}:{self.port}")
+            return True
         except Exception as e:
-            logger.error(f"Failed to connect to DoIP server: {e}")
-            raise
+            logger.error(f"Failed to connect to {self.ip}:{self.port} - {e}")
+            self.close()
+            return False
+        
+    def send(self, data: bytes) -> bool:
+        """
+        Send raw bytes over TCP connection.
 
-    def send(self, data: bytes):
-        """Send data to the DoIP server."""
-        if not self.sock:
-            raise ConnectionError("Not connected to DoIP server.")
+        Args:
+            data: Raw bytes to send
+
+        Returns:
+            True if send successful, False otherwise
+        """
+        if not self.is_active():
+            logger.error("Cannot send: No active TCP connection.")
+            return False
+
         try:
             self.sock.sendall(data)
-            logger.info(f"Sent data: {data.hex()}")
+            logger.info(f"Sent {len(data)} bytes to {self.ip}:{self.port}")
+            return True
         except Exception as e:
-            logger.error(f"Failed to send data: {e}")
-            raise
+            logger.error(f"Failed to send TCP data to {self.ip}:{self.port} - {e}")
+            self.close()
+            return False
 
-    def receive(self, buffer_size=1024) -> bytes:
-        """Receive data from the DoIP server."""
-        if not self.sock:
-            raise ConnectionError("Not connected to DoIP server.")
+    def receive(self, timeout: float = None) -> bytes:
+        """
+        Receive raw bytes from TCP connection.
+
+        Args:
+            timeout: Optional timeout in seconds. Uses self.timeout if not specified.
+
+        Returns:
+            Received bytes or None on error/timeout
+        """
+        if not self.is_active():
+            logger.error("Cannot receive: No active TCP connection.")
+            return None
+
         try:
-            data = self.sock.recv(buffer_size)
-            logger.info(f"Received data: {data.hex()}")
+            if timeout:
+                self.sock.settimeout(timeout)
+            data = self.sock.recv(1024)
+            if data:
+                logger.info(f"Received {len(data)} bytes from {self.ip}:{self.port}")
             return data
+        except socket.timeout:
+            logger.warning("No data received within the timeout period.")
+            return None
         except Exception as e:
-            logger.error(f"Failed to receive data: {e}")
-            raise
+            logger.error(f"Failed to receive TCP data from {self.ip}:{self.port} - {e}")
+            self.close()
+            return None
 
-    def close(self):
-        """Close the connection to the DoIP server."""
-        if self.sock:
-            self.sock.close()
-            logger.info("Connection closed.")
-
-def create_doip_header(payload_type, payload_len):
-    """Create a DoIP header based on the given payload type and length."""
-    protocol_version = 0x02
-    inverse_protocol_version = 0xFD
-    reserved = 0x00
-    header = bytearray(8)
-    header[0] = protocol_version
-    header[1] = inverse_protocol_version
-    header[2] = reserved
-    header[3] = reserved
-    header[4] = (payload_type >> 8) & 0xFF
-    header[5] = payload_type & 0xFF
-    header[6] = (payload_len >> 8) & 0xFF
-    header[7] = payload_len & 0xFF
-    return header
-
-def setup_doip_connection(target_ip, target_port=13400):
-    """Set up a TCP connection to the DoIP server."""
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(5)  # Set a timeout for connection attempts
-    sock.connect((target_ip, target_port))
-    return sock
+    def send_doip_message(self, message: bytes):
+        """
+        Legacy method to send DoIP message. Use send() method instead.
+        Kept for backward compatibility.
+        """
+        if not self.is_active():
+            logger.error("Cannot send message: No active connection.")
+            return False
+        try:
+            self.sock.sendall(message)
+            logger.info(f"Sent DoIP message to {self.ip}:{self.port}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send DoIP message - {e}")
+            self.close()
+            return False

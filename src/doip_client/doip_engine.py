@@ -7,17 +7,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+import asyncio
+
 # Project Related Imports
 import json
 from lib.discovery import DoIPDiscovery
-from lib.message import DoIPMessage
-from lib.connection import DoIPConnection
 
 class DoIPEngine:
     def __init__(self, config_path: str):
         self.config_path = config_path
         self.config = self.load_config()
-        # self.connection: Optional[DoIPConnection] = None  # Store the connection for later use
+        self.connection = None
+        self.is_running = False
 
     def load_config(self) -> dict:
         """Load DoIP client configuration from JSON file."""
@@ -25,19 +26,52 @@ class DoIPEngine:
             config = json.load(f)
         return config
     
-    def connect(self):
-        """Main method to handle the connection process."""
+    async def start_connection(self):
+        """
+        Handles the entire lifecycle of the DoIP connection.
+        This runs for the 'duration' of the connection.
+        """
         logger.info("Starting DoIP Engine...")
-        discovery = DoIPDiscovery(self.config)
-        vehicle_ip = discovery.find_vehicle(timeout=self.config["timeouts"]["discovery_timeout_ms"] / 1000.0)
-        
-        if vehicle_ip:
+        try:
+            discovery = DoIPDiscovery(self.config)
+            # Convert timeout from milliseconds to seconds (10000ms = 10s)
+            timeout_seconds = 10.0
+
+            # Use hybrid discovery: Try announcements first, then fall back to active discovery
+            vehicle_ip = discovery.find_vehicle_hybrid(
+                timeout=timeout_seconds,
+                try_announcements_first=True
+            )
+
+            if not vehicle_ip:
+                logger.warning("No vehicle discovered. Please check your network and try again.")
+                return
+
             logger.info(f"Vehicle discovered at IP: {vehicle_ip}")
-            # Here we would establish a TCP connection using DoIPConnection
-            # self.connection = DoIPConnection(vehicle_ip, self.config)
-            # await self.connection.establish()
-        else:
-            logger.warning("No vehicle discovered. Please check your network and try again.")
+
+            # Accessing the nested value: config -> doip_client -> network -> tcp_port
+            tcp_port = self.config["doip_client"]["network"]["tcp_port"]
+
+            self.connection = DoIPConnection(vehicle_ip, tcp_port)
+            await self.connection.connect()
+
+            self.is_running = True
+            logger.info("DoIP Engine is now running. You can implement further communication logic here.")
+            await asyncio.sleep(1)  # Keep the connection alive for the specified duration
+
+        except Exception as e:
+            logger.error(f"An error occurred in DoIP Engine: {e}")
+        finally:
+            if self.connection:
+                self.connection.close()
+            logger.info("DoIP Engine has stopped.")
+
+    async def close_connection(self):
+        """Gracefully stop the DoIP connection."""
+        self.is_running = False
+        if self.connection:
+            self.connection.close()
+            logger.info("DoIP connection closed.")
 
 # later we can add option to connect to multiple vehicles based on the config, 
 # for now we will just connect to the first one in the list
