@@ -12,7 +12,7 @@ import socket
 # Import the new layers
 from lib.connection import UDPConnection
 from lib.doip_protocol import DoIPProtocolHandler
-from lib.doip_messages import VehicleIdentificationRequest, VehicleAnnouncement
+from lib.doip_messages import VehicleIdentificationRequest, VehicleAnnouncement, DoIPMessageType
 
 
 class DoIPDiscovery:
@@ -66,15 +66,14 @@ class DoIPDiscovery:
                         break
 
                     # Protocol Layer: Parse DoIP frame
-                    msg, _ = DoIPProtocolHandler.receive_frame(udp_conn.sock)
+                    msg = DoIPProtocolHandler.parse_frame(data)
 
-                    if msg and msg.payload_type == 0x0004:  # Vehicle Announcement
+                    if msg and msg.payload_type == DoIPMessageType.VEHICLE_ANNOUNCEMENT:
                         # Message Layer: Extract announcement information
                         vehicle_info = VehicleAnnouncement.parse(msg.payload)
                         vehicle_info['source_ip'] = addr[0] if addr else None
                         announcements.append(vehicle_info)
                         logger.info(f"Received announcement from {addr[0] if addr else 'unknown'}")
-
                 except socket.timeout:
                     break
                 except Exception as e:
@@ -169,9 +168,9 @@ class DoIPDiscovery:
 
             if data:
                 # Protocol Layer: Parse DoIP frame
-                msg, _ = DoIPProtocolHandler.receive_frame(udp_conn.sock)
+                msg = DoIPProtocolHandler.parse_frame(data)
 
-                if msg and msg.payload_type == 0x0002:  # Vehicle Identification Response
+                if msg and msg.payload_type == DoIPMessageType.VEHICLE_IDENTIFICATION_RESPONSE:
                     # Message Layer: Extract vehicle information from response
                     vehicle_info = VehicleAnnouncement.parse(msg.payload)
                     vehicle_ip = addr[0]

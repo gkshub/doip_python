@@ -181,6 +181,33 @@ class DoIPProtocolHandler:
             return None, None
 
     @staticmethod
+    def parse_frame(data: bytes) -> 'DoIPMessage':
+        """
+        Parse raw bytes into a DoIP message (without receiving from socket).
+
+        Args:
+            data: Raw bytes to parse
+
+        Returns:
+            DoIPMessage object or None on error
+        """
+        try:
+            if len(data) < 8:
+                logger.warning(f"Received data too short ({len(data)} bytes) to be a valid DoIP message")
+                return None
+
+            msg = DoIPMessage.parse(data)
+            logger.info(f"Parsed DoIP frame: Type=0x{msg.payload_type:04X}, Length={len(msg.payload)}")
+            return msg
+
+        except ValueError as e:
+            logger.error(f"DoIP validation error - {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Failed to parse DoIP frame - {e}")
+            return None
+
+    @staticmethod
     def validate_frame(raw_bytes: bytes) -> bool:
         """
         Validate that raw bytes contain a valid DoIP frame header.

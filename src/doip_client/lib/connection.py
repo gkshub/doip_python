@@ -20,6 +20,9 @@ class BaseConnection:
         if self.sock:
             try:
                 self.sock.shutdown(socket.SHUT_RDWR)
+            except OSError as e:
+                if e.errno != 107:  # ENOTCONN - socket not connected
+                    logger.warning(f"Error shutting down socket: {e}")
             except Exception as e:
                 logger.warning(f"Error shutting down socket: {e}")
             self.sock.close()
@@ -32,6 +35,13 @@ class UDPConnection(BaseConnection):
     def __init__(self, timeout=5.0):
         super().__init__(timeout)
         self.broadcast_enabled = False
+
+    def close(self):
+        """Close UDP socket without shutdown (UDP is connectionless)"""
+        if self.sock:
+            self.sock.close()
+            self.sock = None
+            logger.info("UDP connection closed.")
 
     def init_broadcast(self) -> bool:
         """
@@ -176,6 +186,20 @@ class TCPConnection(BaseConnection):
         super().__init__(timeout)
         self.ip = ip
         self.port = port
+
+    def close(self):
+        """Close TCP socket with proper shutdown"""
+        if self.sock:
+            try:
+                self.sock.shutdown(socket.SHUT_RDWR)
+            except OSError as e:
+                if e.errno != 107:  # ENOTCONN - socket not connected
+                    logger.warning(f"Error shutting down socket: {e}")
+            except Exception as e:
+                logger.warning(f"Error shutting down socket: {e}")
+            self.sock.close()
+            self.sock = None
+            logger.info("TCP connection closed.")
 
     def connect(self):
         # Create a TCP socket and attempt to connect to the specified IP and port
